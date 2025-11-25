@@ -448,8 +448,6 @@ def fastlane_register_app(
         "com.apple.developer.icloud-container-identifiers",
         "com.apple.developer.ubiquity-container-identifiers",
         "com.apple.developer.ubiquity-kvstore-identifier",
-        "com.apple.developer.icloud-container-environment",
-        "com.apple.developer.icloud-services",
     ]
 
     group_entitlements = ["com.apple.security.application-groups"]
