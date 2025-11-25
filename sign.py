@@ -448,6 +448,8 @@ def fastlane_register_app(
         "com.apple.developer.icloud-container-identifiers",
         "com.apple.developer.ubiquity-container-identifiers",
         "com.apple.developer.ubiquity-kvstore-identifier",
+        "com.apple.developer.icloud-container-environment",
+        "com.apple.developer.icloud-services",
     ]
 
     group_entitlements = ["com.apple.security.application-groups"]
@@ -988,6 +990,10 @@ class Signer:
                 "get-task-allow",
                 "keychain-access-groups",
                 self.__get_aps_environment_key(),
+                "com.apple.developer.push-to-talk",
+                "com.apple.developer.usernotifications.communication",
+                "com.apple.developer.usernotifications.filtering",
+                "com.apple.developer.associated-domains",
                 "com.apple.developer.icloud-container-development-container-identifiers",
                 "com.apple.developer.icloud-container-environment",
                 "com.apple.developer.icloud-container-identifiers",
