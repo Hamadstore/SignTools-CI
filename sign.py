@@ -16,7 +16,7 @@ import random
 import string
 import tempfile
 import json
-from multiprocessing.dummy import Pool as ThreadPool   # fixed import
+from multiprocessing.pool import ThreadPool
 
 secret_url = os.path.expandvars("$SECRET_URL").strip().rstrip("/")
 secret_key = os.path.expandvars("$SECRET_KEY")
@@ -44,11 +44,13 @@ def run_process(
     try:
         result = subprocess.run(cmd, capture_output=capture, check=check, env=env, cwd=cwd, timeout=timeout)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        raise Exception(
-            {
-                "stdout": decode_clean(e.stdout),
-                "stderr": decode_clean(e.stderr),
-            }
+        raise (
+            Exception(
+                {
+                    "stdout": decode_clean(e.stdout),
+                    "stderr": decode_clean(e.stderr),
+                }
+            )
         ) from e
     return result
 
@@ -134,9 +136,8 @@ def curl_with_auth(
     check: bool = True,
     capture: bool = True,
 ):
-    args = []
-    for key, value in form_data:
-        args.extend(["-F", f"{key}={value}"])
+    args = map(lambda x: ["-F", f"{x[0]}={x[1]}"], form_data)
+    args = [item for sublist in args for item in sublist]
     if output:
         args.extend(["-o", str(output)])
     return run_process(
@@ -459,7 +460,6 @@ def fastlane_register_app(
         "com.apple.external-accessory.wireless-configuration": tuple(["--wireless-accessory"]),
         "inter-app-audio": tuple(["--inter-app-audio"]),
         "com.apple.developer.kernel.extended-virtual-addressing": tuple(["--extended-virtual-address-space"]),
-		"com.apple.developer.kernel.increased-memory-limit": tuple(["--extended-virtual-address-space"]),
         "com.apple.developer.networking.multipath": tuple(["--multipath"]),
         "com.apple.developer.networking.networkextension": tuple(["--network-extension"]),
         "com.apple.developer.networking.vpn.api": tuple(["--personal-vpn"]),
@@ -915,7 +915,7 @@ class Signer:
         old_entitlements: Dict[Any, Any]
         try:
             old_entitlements = codesign_dump_entitlements(component)
-        except Exception:
+        except:
             print("Failed to dump entitlements, using empty")
             old_entitlements = {}
 
@@ -988,12 +988,21 @@ class Signer:
                 "get-task-allow",
                 "keychain-access-groups",
                 self.__get_aps_environment_key(),
+                # Testing
+                "com.apple.developer.networking.carrier-constrained.app-optimized",
+                "com.apple.developer.networking.carrier-constrained.appcategory",
+                "com.apple.developer.calling-app",
+                "com.apple.developer.messaging-app",
+                "com.apple.developer.avfoundation.multitasking-camera-access",
+                "com.apple.developer.push-to-talk",
+                "com.apple.developer.usernotifications.communication",
+                "com.apple.developer.usernotifications.filtering",
+                "com.apple.developer.associated-domains",
                 "com.apple.developer.icloud-container-development-container-identifiers",
                 "com.apple.developer.icloud-container-environment",
                 "com.apple.developer.icloud-container-identifiers",
                 "com.apple.developer.icloud-services",
                 "com.apple.developer.kernel.extended-virtual-addressing",
-				"com.apple.developer.kernel.increased-memory-limit",
                 "com.apple.developer.networking.multipath",
                 "com.apple.developer.networking.networkextension",
                 "com.apple.developer.networking.vpn.api",
@@ -1003,13 +1012,6 @@ class Signer:
                 "com.apple.developer.ubiquity-container-identifiers",
                 "com.apple.developer.ubiquity-kvstore-identifier",
                 "com.apple.developer.associated-domains",
-				"com.apple.developer.usernotifications.communication",
-                "com.apple.developer.usernotifications.filtering",
-				"com.apple.developer.avfoundation.multitasking-camera-access",
-				"com.apple.developer.calling-app",
-				"com.apple.developer.messaging-app",
-				"com.apple.developer.networking.carrier-constrained.appcategory",
-				"com.apple.developer.networking.carrier-constrained.app-optimized",
                 # macOS only
                 "com.apple.security.app-sandbox",
                 "com.apple.security.assets.pictures.read-write",
@@ -1046,75 +1048,48 @@ class Signer:
             entitlements[self.__get_application_identifier_key()] = f"{self.opts.team_id}.{bundle_id}"
 
             # remap any ids in entitlements, will later byte patch them into various files
-            # remap any ids in entitlements, will later byte patch them into various files
             if self.opts.encode_ids:
-                # --- Group entitlements (with length limit) ---
-                group_entitlements = ["com.apple.security.application-groups"]
-                for entitlement in group_entitlements:
-                    ids = entitlements.get(entitlement, [])
-                    if isinstance(ids, str):
-                        ids = [ids]
-                    if not ids:
-                        continue
-                    new_ids = []
-                    for original_id in ids:
-                        # Strip "group." prefix if present
-                        to_encode = original_id[6:] if original_id.startswith("group.") else original_id
-                        encoded = self.gen_id(to_encode)
-                        # Truncate to fit within 64 chars total ("group." + encoded <= 64)
-                        if len(encoded) > 58:
-                            encoded = encoded[:58]
-                        new_id = "group." + encoded
-                        new_ids.append(new_id)
-                        self.mappings[original_id] = new_id
-                    if isinstance(entitlements[entitlement], str):
-                        entitlements[entitlement] = new_ids[0]
-                    else:
-                        entitlements[entitlement] = new_ids
-
-                # --- iCloud entitlements (always add "iCloud." prefix) ---
-                icloud_entitlements = [
-                    "com.apple.developer.icloud-container-identifiers",
-                    "com.apple.developer.ubiquity-container-identifiers",
-                    "com.apple.developer.icloud-container-development-container-identifiers",
-                ]
-                for entitlement in icloud_entitlements:
-                    ids = entitlements.get(entitlement, [])
-                    if isinstance(ids, str):
-                        ids = [ids]
-                    if not ids:
-                        continue
-                    new_ids = []
-                    for original_id in ids:
-                        # Strip "iCloud." if present, then encode
-                        to_encode = original_id[7:] if original_id.startswith("iCloud.") else original_id
-                        encoded = self.gen_id(to_encode)
-                        new_id = "iCloud." + encoded
-                        new_ids.append(new_id)
-                        self.mappings[original_id] = new_id
-                    if isinstance(entitlements[entitlement], str):
-                        entitlements[entitlement] = new_ids[0]
-                    else:
-                        entitlements[entitlement] = new_ids
-
-                # --- keychain-access-groups and ubiquity kvstore ---
                 for remap_def in (
-                    RemapDef(["keychain-access-groups"], self.opts.team_id + ".", True, True),
-                    RemapDef(["com.apple.developer.ubiquity-kvstore-identifier"], self.opts.team_id + ".", False, False),
+                    RemapDef(["com.apple.security.application-groups"], "group.", False, True),  # group.com.test.app
+                    RemapDef(
+                        [
+                            "com.apple.developer.icloud-container-identifiers",
+                            "com.apple.developer.ubiquity-container-identifiers",
+                            "com.apple.developer.icloud-container-development-container-identifiers",
+                        ],
+                        "iCloud.",
+                        False,
+                        True,
+                    ),  # iCloud.com.test.app
+                    #
+                    # the "prefix_only" definitions need to be at the end to make sure that the correct
+                    # action is taken if the same id is already remapped for non-"prefix_only" ids
+                    #
+                    RemapDef(
+                        ["keychain-access-groups"], self.opts.team_id + ".", True, True
+                    ),  # JF8WQ0B38Z.com.test.app
+                    RemapDef(
+                        ["com.apple.developer.ubiquity-kvstore-identifier"], self.opts.team_id + ".", False, False
+                    ),  # JF8WQ0B38Z.com.test.app
                 ):
                     for entitlement in remap_def.entitlements:
-                        remap_ids: Union[List[str], str] = entitlements.get(entitlement, [])
+                        remap_ids: List[str] | str = entitlements.get(entitlement, [])
                         if isinstance(remap_ids, str):
                             remap_ids = [remap_ids]
+
                         if len(remap_ids) < 1:
                             continue
+
                         entitlements[entitlement] = []
-                        for remap_id in [id[len(remap_def.prefix):] for id in remap_ids]:
+
+                        for remap_id in [id[len(remap_def.prefix) :] for id in remap_ids]:
                             if remap_def.prefix_only:
+                                # don't change the id as only its prefix needs to be remapped
                                 new_id = remap_def.prefix + remap_id
                             else:
                                 new_id = remap_def.prefix + self.gen_id(remap_id)
                                 self.mappings[remap_def.prefix + remap_id] = new_id
+
                             entitlements[entitlement].append(new_id)
                             if not remap_def.is_list:
                                 entitlements[entitlement] = entitlements[entitlement][0]
@@ -1137,7 +1112,7 @@ class Signer:
             print("ID mappings:")
             print_object(self.mappings)
             # ensure all mappings are same length and actually byte patchable
-            # assert all(len(k) == len(v) for k, v in self.mappings.items())
+            assert all(len(k) == len(v) for k, v in self.mappings.items())
 
             print("Removed entitlements:")
             print_object(list(self.removed_entitlements))
@@ -1158,7 +1133,7 @@ class Signer:
                     pipe = jobs[path]
                     try:
                         path.relative_to(component)
-                    except ValueError:
+                    except:
                         continue
                     if pipe.poll() is None:
                         print("Waiting for sub-component to finish signing:", path)
@@ -1179,7 +1154,7 @@ class Signer:
                     # make sure patches are the same length
                     patches = {k: v for k, v in self.mappings.items() if len(k) == len(v)}
                     # sort by decreasing length to make sure that there are no overlaps
-                    patches = dict(sorted(patches.items(), key=lambda x: len(x[0]), reverse=True))
+                    patches = dict(sorted(self.mappings.items(), key=lambda x: len(x[0]), reverse=True))
 
                     if len(patches) < 1:
                         print("Nothing to patch")
@@ -1307,7 +1282,7 @@ if __name__ == "__main__":
     failed = False
     try:
         run()
-    except Exception:
+    except:
         failed = True
         traceback.print_exc()
     finally:
