@@ -1087,7 +1087,7 @@ class Signer:
                                 # don't change the id as only its prefix needs to be remapped
                                 new_id = remap_def.prefix + remap_id
                             else:
-                                    is_icloud_container = entitlement in [
+                                is_icloud_container = entitlement in [
                                     "com.apple.developer.icloud-container-identifiers",
                                     "com.apple.developer.ubiquity-container-identifiers",
                                     "com.apple.developer.icloud-container-development-container-identifiers",
