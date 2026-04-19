@@ -1055,10 +1055,10 @@ class Signer:
                             "com.apple.developer.ubiquity-container-identifiers",
                             "com.apple.developer.icloud-container-development-container-identifiers",
                         ],
-                        "iCloud.",
+                        "",          # No prefix – encode the whole identifier as is
                         False,
                         True,
-                    ),  # iCloud.com.test.app
+                    ),  # e.g. 57T9237FN3.net.whatsapp.WhatsApp -> XXXXX.XXX.XXXXXXXX.XXXXXXXX
                     #
                     # the "prefix_only" definitions need to be at the end to make sure that the correct
                     # action is taken if the same id is already remapped for non-"prefix_only" ids
@@ -1080,7 +1080,13 @@ class Signer:
 
                         entitlements[entitlement] = []
 
-                        for remap_id in [id[len(remap_def.prefix) :] for id in remap_ids]:
+                        # For empty prefix, do not strip anything; take the whole id.
+                        if remap_def.prefix == "":
+                            stripped_ids = remap_ids
+                        else:
+                            stripped_ids = [id[len(remap_def.prefix):] for id in remap_ids]
+
+                        for remap_id in stripped_ids:
                             if remap_def.prefix_only:
                                 # don't change the id as only its prefix needs to be remapped
                                 new_id = remap_def.prefix + remap_id
