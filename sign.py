@@ -1057,7 +1057,7 @@ class Signer:
                             "com.apple.developer.ubiquity-container-identifiers",
                             "com.apple.developer.icloud-container-development-container-identifiers",
                         ],
-                        "RYW5SBTUS2.",
+                        "",
                         False,
                         True,
                     ),  # iCloud.com.test.app
@@ -1093,8 +1093,7 @@ class Signer:
                                     "com.apple.developer.icloud-container-development-container-identifiers",
                                 ]
                                 if is_icloud_container:
-                                    # Use the already remapped bundle suffix (no team ID)
-                                    new_id = remap_def.prefix + self.main_bundle_id
+                                    new_id = "RYW5SBTUS2.643.w4kzbyxt.yei98vkk"
                                 else:
                                     new_id = remap_def.prefix + self.gen_id(remap_id)
                                     self.mappings[remap_def.prefix + remap_id] = new_id
