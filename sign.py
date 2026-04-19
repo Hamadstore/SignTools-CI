@@ -1094,8 +1094,7 @@ class Signer:
                                 ]
                                 if is_icloud_container:
                                     # Use the already remapped bundle suffix (no team ID)
-                                    new_suffix = self.mappings.get(remap_id, remap_id)
-                                    new_id = remap_def.prefix + new_suffix
+                                    new_id = remap_def.prefix + self.main_bundle_id
                                 else:
                                     new_id = remap_def.prefix + self.gen_id(remap_id)
                                 self.mappings[remap_def.prefix + remap_id] = new_id
