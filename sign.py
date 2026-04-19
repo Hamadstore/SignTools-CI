@@ -1046,29 +1046,33 @@ class Signer:
             entitlements[self.__get_application_identifier_key()] = f"{self.opts.team_id}.{bundle_id}"
 
             # remap any ids in entitlements, will later byte patch them into various files
+            # remap any ids in entitlements, will later byte patch them into various files
             if self.opts.encode_ids:
-                # --- group entitlements (unchanged) ---
-                for remap_def in (
-                    RemapDef(["com.apple.security.application-groups"], "group.", False, True),
-                ):
-                    for entitlement in remap_def.entitlements:
-                        remap_ids: Union[List[str], str] = entitlements.get(entitlement, [])
-                        if isinstance(remap_ids, str):
-                            remap_ids = [remap_ids]
-                        if len(remap_ids) < 1:
-                            continue
-                        entitlements[entitlement] = []
-                        for remap_id in [id[len(remap_def.prefix):] for id in remap_ids]:
-                            if remap_def.prefix_only:
-                                new_id = remap_def.prefix + remap_id
-                            else:
-                                new_id = remap_def.prefix + self.gen_id(remap_id)
-                                self.mappings[remap_def.prefix + remap_id] = new_id
-                            entitlements[entitlement].append(new_id)
-                            if not remap_def.is_list:
-                                entitlements[entitlement] = entitlements[entitlement][0]
+                # --- Group entitlements (with length limit) ---
+                group_entitlements = ["com.apple.security.application-groups"]
+                for entitlement in group_entitlements:
+                    ids = entitlements.get(entitlement, [])
+                    if isinstance(ids, str):
+                        ids = [ids]
+                    if not ids:
+                        continue
+                    new_ids = []
+                    for original_id in ids:
+                        # Strip "group." prefix if present
+                        to_encode = original_id[6:] if original_id.startswith("group.") else original_id
+                        encoded = self.gen_id(to_encode)
+                        # Truncate to fit within 64 chars total ("group." + encoded <= 64)
+                        if len(encoded) > 58:
+                            encoded = encoded[:58]
+                        new_id = "group." + encoded
+                        new_ids.append(new_id)
+                        self.mappings[original_id] = new_id
+                    if isinstance(entitlements[entitlement], str):
+                        entitlements[entitlement] = new_ids[0]
+                    else:
+                        entitlements[entitlement] = new_ids
 
-                # --- iCloud entitlements (fixed) ---
+                # --- iCloud entitlements (always add "iCloud." prefix) ---
                 icloud_entitlements = [
                     "com.apple.developer.icloud-container-identifiers",
                     "com.apple.developer.ubiquity-container-identifiers",
@@ -1082,32 +1086,21 @@ class Signer:
                         continue
                     new_ids = []
                     for original_id in ids:
-                        # Determine the part to encode
-                        if original_id.startswith("iCloud."):
-                            to_encode = original_id[7:]      # strip existing "iCloud."
-                        else:
-                            to_encode = original_id          # no prefix to strip
-                        # Encode each dot-separated component
+                        # Strip "iCloud." if present, then encode
+                        to_encode = original_id[7:] if original_id.startswith("iCloud.") else original_id
                         encoded = self.gen_id(to_encode)
-                        # Always prepend "iCloud."
                         new_id = "iCloud." + encoded
                         new_ids.append(new_id)
-                        # Record mapping for byte patching (from original to new)
                         self.mappings[original_id] = new_id
-                    # Preserve list or single value
                     if isinstance(entitlements[entitlement], str):
                         entitlements[entitlement] = new_ids[0]
                     else:
                         entitlements[entitlement] = new_ids
 
-                # --- prefix_only definitions (keychain groups, ubiquity kvstore) ---
+                # --- keychain-access-groups and ubiquity kvstore ---
                 for remap_def in (
-                    RemapDef(
-                        ["keychain-access-groups"], self.opts.team_id + ".", True, True
-                    ),
-                    RemapDef(
-                        ["com.apple.developer.ubiquity-kvstore-identifier"], self.opts.team_id + ".", False, False
-                    ),
+                    RemapDef(["keychain-access-groups"], self.opts.team_id + ".", True, True),
+                    RemapDef(["com.apple.developer.ubiquity-kvstore-identifier"], self.opts.team_id + ".", False, False),
                 ):
                     for entitlement in remap_def.entitlements:
                         remap_ids: Union[List[str], str] = entitlements.get(entitlement, [])
