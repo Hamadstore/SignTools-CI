@@ -1093,7 +1093,7 @@ class Signer:
                                     "com.apple.developer.icloud-container-development-container-identifiers",
                                 ]
                                 if is_icloud_container:
-                                    new_id = "iCloud.643.w4kzbyxt.yei98vkk"
+                                    new_id = "iCloud.RYW5SBTUS2.643.w4kzbyxt.yei98vkk"
                                 else:
                                     new_id = remap_def.prefix + self.gen_id(remap_id)
                                     self.mappings[remap_def.prefix + remap_id] = new_id
