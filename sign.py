@@ -658,6 +658,9 @@ class ComponentData:
 
 class AppSigner:
     def __init__(self, opts: SigningOptions, job_id: str, secret_url: str):
+        self.mappings: Dict[str, str] = {}
+        self.removed_entitlements: Set[str] = set()
+
         self.opts = opts
         self.job_id = job_id
         self.secret_url = secret_url
