@@ -1047,53 +1047,81 @@ class Signer:
 
             # remap any ids in entitlements, will later byte patch them into various files
             if self.opts.encode_ids:
+                # --- group entitlements (unchanged) ---
                 for remap_def in (
-                    RemapDef(["com.apple.security.application-groups"], "group.", False, True),  # group.com.test.app
-                    RemapDef(
-                        [
-                            "com.apple.developer.icloud-container-identifiers",
-                            "com.apple.developer.ubiquity-container-identifiers",
-                            "com.apple.developer.icloud-container-development-container-identifiers",
-                        ],
-                        "",          # No prefix – encode the whole identifier as is
-                        False,
-                        True,
-                    ),  # e.g. 57T9237FN3.net.whatsapp.WhatsApp -> XXXXX.XXX.XXXXXXXX.XXXXXXXX
-                    #
-                    # the "prefix_only" definitions need to be at the end to make sure that the correct
-                    # action is taken if the same id is already remapped for non-"prefix_only" ids
-                    #
-                    RemapDef(
-                        ["keychain-access-groups"], self.opts.team_id + ".", True, True
-                    ),  # JF8WQ0B38Z.com.test.app
-                    RemapDef(
-                        ["com.apple.developer.ubiquity-kvstore-identifier"], self.opts.team_id + ".", False, False
-                    ),  # JF8WQ0B38Z.com.test.app
+                    RemapDef(["com.apple.security.application-groups"], "group.", False, True),
                 ):
                     for entitlement in remap_def.entitlements:
                         remap_ids: Union[List[str], str] = entitlements.get(entitlement, [])
                         if isinstance(remap_ids, str):
                             remap_ids = [remap_ids]
-
                         if len(remap_ids) < 1:
                             continue
-
                         entitlements[entitlement] = []
-
-                        # For empty prefix, do not strip anything; take the whole id.
-                        if remap_def.prefix == "":
-                            stripped_ids = remap_ids
-                        else:
-                            stripped_ids = [id[len(remap_def.prefix):] for id in remap_ids]
-
-                        for remap_id in stripped_ids:
+                        for remap_id in [id[len(remap_def.prefix):] for id in remap_ids]:
                             if remap_def.prefix_only:
-                                # don't change the id as only its prefix needs to be remapped
                                 new_id = remap_def.prefix + remap_id
                             else:
                                 new_id = remap_def.prefix + self.gen_id(remap_id)
                                 self.mappings[remap_def.prefix + remap_id] = new_id
+                            entitlements[entitlement].append(new_id)
+                            if not remap_def.is_list:
+                                entitlements[entitlement] = entitlements[entitlement][0]
 
+                # --- iCloud entitlements (fixed) ---
+                icloud_entitlements = [
+                    "com.apple.developer.icloud-container-identifiers",
+                    "com.apple.developer.ubiquity-container-identifiers",
+                    "com.apple.developer.icloud-container-development-container-identifiers",
+                ]
+                for entitlement in icloud_entitlements:
+                    ids = entitlements.get(entitlement, [])
+                    if isinstance(ids, str):
+                        ids = [ids]
+                    if not ids:
+                        continue
+                    new_ids = []
+                    for original_id in ids:
+                        # Determine the part to encode
+                        if original_id.startswith("iCloud."):
+                            to_encode = original_id[7:]      # strip existing "iCloud."
+                        else:
+                            to_encode = original_id          # no prefix to strip
+                        # Encode each dot-separated component
+                        encoded = self.gen_id(to_encode)
+                        # Always prepend "iCloud."
+                        new_id = "iCloud." + encoded
+                        new_ids.append(new_id)
+                        # Record mapping for byte patching (from original to new)
+                        self.mappings[original_id] = new_id
+                    # Preserve list or single value
+                    if isinstance(entitlements[entitlement], str):
+                        entitlements[entitlement] = new_ids[0]
+                    else:
+                        entitlements[entitlement] = new_ids
+
+                # --- prefix_only definitions (keychain groups, ubiquity kvstore) ---
+                for remap_def in (
+                    RemapDef(
+                        ["keychain-access-groups"], self.opts.team_id + ".", True, True
+                    ),
+                    RemapDef(
+                        ["com.apple.developer.ubiquity-kvstore-identifier"], self.opts.team_id + ".", False, False
+                    ),
+                ):
+                    for entitlement in remap_def.entitlements:
+                        remap_ids: Union[List[str], str] = entitlements.get(entitlement, [])
+                        if isinstance(remap_ids, str):
+                            remap_ids = [remap_ids]
+                        if len(remap_ids) < 1:
+                            continue
+                        entitlements[entitlement] = []
+                        for remap_id in [id[len(remap_def.prefix):] for id in remap_ids]:
+                            if remap_def.prefix_only:
+                                new_id = remap_def.prefix + remap_id
+                            else:
+                                new_id = remap_def.prefix + self.gen_id(remap_id)
+                                self.mappings[remap_def.prefix + remap_id] = new_id
                             entitlements[entitlement].append(new_id)
                             if not remap_def.is_list:
                                 entitlements[entitlement] = entitlements[entitlement][0]
