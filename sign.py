@@ -1057,7 +1057,7 @@ class Signer:
                             "com.apple.developer.ubiquity-container-identifiers",
                             "com.apple.developer.icloud-container-development-container-identifiers",
                         ],
-                        "iCloud.",
+                        "RYW5SBTUS2.",
                         False,
                         True,
                     ),  # iCloud.com.test.app
