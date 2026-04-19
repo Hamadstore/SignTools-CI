@@ -16,7 +16,7 @@ import random
 import string
 import tempfile
 import json
-from multiprocessing.pool import ThreadPool
+from multiprocessing.dummy import Pool as ThreadPool   # fixed import
 
 secret_url = os.path.expandvars("$SECRET_URL").strip().rstrip("/")
 secret_key = os.path.expandvars("$SECRET_KEY")
@@ -44,13 +44,11 @@ def run_process(
     try:
         result = subprocess.run(cmd, capture_output=capture, check=check, env=env, cwd=cwd, timeout=timeout)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        raise (
-            Exception(
-                {
-                    "stdout": decode_clean(e.stdout),
-                    "stderr": decode_clean(e.stderr),
-                }
-            )
+        raise Exception(
+            {
+                "stdout": decode_clean(e.stdout),
+                "stderr": decode_clean(e.stderr),
+            }
         ) from e
     return result
 
@@ -136,8 +134,9 @@ def curl_with_auth(
     check: bool = True,
     capture: bool = True,
 ):
-    args = map(lambda x: ["-F", f"{x[0]}={x[1]}"], form_data)
-    args = [item for sublist in args for item in sublist]
+    args = []
+    for key, value in form_data:
+        args.extend(["-F", f"{key}={value}"])
     if output:
         args.extend(["-o", str(output)])
     return run_process(
@@ -915,7 +914,7 @@ class Signer:
         old_entitlements: Dict[Any, Any]
         try:
             old_entitlements = codesign_dump_entitlements(component)
-        except:
+        except Exception:
             print("Failed to dump entitlements, using empty")
             old_entitlements = {}
 
@@ -988,16 +987,6 @@ class Signer:
                 "get-task-allow",
                 "keychain-access-groups",
                 self.__get_aps_environment_key(),
-                # Testing
-                "com.apple.developer.networking.carrier-constrained.app-optimized",
-                "com.apple.developer.networking.carrier-constrained.appcategory",
-                "com.apple.developer.calling-app",
-                "com.apple.developer.messaging-app",
-                "com.apple.developer.avfoundation.multitasking-camera-access",
-                "com.apple.developer.push-to-talk",
-                "com.apple.developer.usernotifications.communication",
-                "com.apple.developer.usernotifications.filtering",
-                "com.apple.developer.associated-domains",
                 "com.apple.developer.icloud-container-development-container-identifiers",
                 "com.apple.developer.icloud-container-environment",
                 "com.apple.developer.icloud-container-identifiers",
@@ -1012,6 +1001,13 @@ class Signer:
                 "com.apple.developer.ubiquity-container-identifiers",
                 "com.apple.developer.ubiquity-kvstore-identifier",
                 "com.apple.developer.associated-domains",
+				"com.apple.developer.usernotifications.communication",
+                "com.apple.developer.usernotifications.filtering",
+				"com.apple.developer.avfoundation.multitasking-camera-access",
+				"com.apple.developer.calling-app",
+				"com.apple.developer.messaging-app",
+				"com.apple.developer.networking.carrier-constrained.appcategory",
+				"com.apple.developer.networking.carrier-constrained.app-optimized",
                 # macOS only
                 "com.apple.security.app-sandbox",
                 "com.apple.security.assets.pictures.read-write",
@@ -1047,6 +1043,7 @@ class Signer:
             entitlements["com.apple.developer.team-identifier"] = self.opts.team_id
             entitlements[self.__get_application_identifier_key()] = f"{self.opts.team_id}.{bundle_id}"
 
+            # remap any ids in entitlements, will later byte patch them into various files
             # remap any ids in entitlements, will later byte patch them into various files
             if self.opts.encode_ids:
                 # --- Group entitlements (with length limit) ---
@@ -1159,7 +1156,7 @@ class Signer:
                     pipe = jobs[path]
                     try:
                         path.relative_to(component)
-                    except:
+                    except ValueError:
                         continue
                     if pipe.poll() is None:
                         print("Waiting for sub-component to finish signing:", path)
@@ -1180,7 +1177,7 @@ class Signer:
                     # make sure patches are the same length
                     patches = {k: v for k, v in self.mappings.items() if len(k) == len(v)}
                     # sort by decreasing length to make sure that there are no overlaps
-                    patches = dict(sorted(self.mappings.items(), key=lambda x: len(x[0]), reverse=True))
+                    patches = dict(sorted(patches.items(), key=lambda x: len(x[0]), reverse=True))
 
                     if len(patches) < 1:
                         print("Nothing to patch")
@@ -1308,7 +1305,7 @@ if __name__ == "__main__":
     failed = False
     try:
         run()
-    except:
+    except Exception:
         failed = True
         traceback.print_exc()
     finally:
