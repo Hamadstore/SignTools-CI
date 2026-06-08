@@ -999,10 +999,6 @@ class Signer:
                 "com.apple.developer.networking.wifi-info",
                 "com.apple.developer.nfc.readersession.formats",
                 "com.apple.developer.siri",
-                "com.apple.developer.usernotifications.filtering",
-                "com.apple.developer.usernotifications.time-sensitive",
-                "com.apple.developer.avfoundation.multitasking-camera-access",
-                "com.apple.developer.usernotifications.communication"
                 "com.apple.developer.ubiquity-container-identifiers",
                 "com.apple.developer.ubiquity-kvstore-identifier",
                 "com.apple.developer.associated-domains",
