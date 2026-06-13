@@ -18,6 +18,11 @@ import tempfile
 import json
 from multiprocessing.dummy import Pool as ThreadPool   # fixed import
 
+# Make fastlane download Apple's WWDR cert over HTTP/1.1 with retries.
+# Without this, the WWDR cert download fails on CI runners and sigh aborts
+# with "Could not install WWDR certificate".
+os.environ["FASTLANE_WWDR_USE_HTTP1_AND_RETRIES"] = "true"
+
 secret_url = os.path.expandvars("$SECRET_URL").strip().rstrip("/")
 secret_key = os.path.expandvars("$SECRET_KEY")
 StrPath = Union[str, Path]
