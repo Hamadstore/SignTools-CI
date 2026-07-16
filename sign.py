@@ -301,7 +301,7 @@ def fastlane_auth(account_name: str, account_pass: str, team_id: str):
 
     auth_pipe = subprocess.Popen(
         # enable copy to clipboard so we're not interactively prompted
-        ["fastlane", "spaceauth", "--copy_to_clipboard"],
+        ["fastlane", "spaceauth", "--copy_to_clipboard", "true"],
         stdin=PIPE,
         stdout=PIPE,
         stderr=PIPE,
