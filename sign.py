@@ -297,11 +297,22 @@ def clean_dev_portal_name(name: str):
     return re.sub("[^0-9a-zA-Z]+", " ", name).strip()
 
 
-def fastlane_auth(account_name: str, account_pass: str, team_id: str):
+def fastlane_env(account_name: str, account_pass: str, team_id: str):
     my_env = os.environ.copy()
+
+    # Never reuse an expired/stale Fastlane session from the CI runner.
+    # Fastlane will authenticate using the account credentials below instead.
+    my_env.pop("FASTLANE_SESSION", None)
+
     my_env["FASTLANE_USER"] = account_name
     my_env["FASTLANE_PASSWORD"] = account_pass
     my_env["FASTLANE_TEAM_ID"] = team_id
+    my_env["FASTLANE_DONT_STORE_PASSWORD"] = "1"
+    return my_env
+
+
+def fastlane_auth(account_name: str, account_pass: str, team_id: str):
+    my_env = fastlane_env(account_name, account_pass, team_id)
 
     auth_pipe = subprocess.Popen(
         # enable copy to clipboard so we're not interactively prompted
@@ -314,7 +325,7 @@ def fastlane_auth(account_name: str, account_pass: str, team_id: str):
 
     start_time = time.time()
     while True:
-        if time.time() - start_time > 60:
+        if time.time() - start_time > 120:
             raise Exception("Operation timed out")
         else:
             result = auth_pipe.poll()
@@ -399,10 +410,7 @@ def fastlane_register_app_extras(
 def fastlane_register_app(
     account_name: str, account_pass: str, team_id: str, bundle_id: str, entitlements: Dict[Any, Any]
 ):
-    my_env = os.environ.copy()
-    my_env["FASTLANE_USER"] = account_name
-    my_env["FASTLANE_PASSWORD"] = account_pass
-    my_env["FASTLANE_TEAM_ID"] = team_id
+    my_env = fastlane_env(account_name, account_pass, team_id)
 
     # no-op if already exists
     run_process(
@@ -506,10 +514,7 @@ def fastlane_register_app(
 def fastlane_get_prov_profile(
     account_name: str, account_pass: str, team_id: str, bundle_id: str, prov_type: str, platform: str, out_file: Path
 ):
-    my_env = os.environ.copy()
-    my_env["FASTLANE_USER"] = account_name
-    my_env["FASTLANE_PASSWORD"] = account_pass
-    my_env["FASTLANE_TEAM_ID"] = team_id
+    my_env = fastlane_env(account_name, account_pass, team_id)
 
     with tempfile.TemporaryDirectory() as tmpdir_str:
         run_process(
