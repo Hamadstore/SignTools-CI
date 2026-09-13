@@ -16,6 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install latest Fastlane
+        run: |
+          brew update
+          brew upgrade fastlane || brew install fastlane
+          fastlane --version
+
       - name: Clear Fastlane session
         run: |
           unset FASTLANE_SESSION
