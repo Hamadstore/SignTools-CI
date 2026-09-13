@@ -298,18 +298,23 @@ def clean_dev_portal_name(name: str):
 
 
 def fastlane_auth(account_name: str, account_pass: str, team_id: str):
+    """Authenticate Fastlane/Spaceship and handle 2FA from the signing service.
+
+    The CI workflow installs Fastlane with the current Spaceship App Store
+    Connect service-key fix before this function is called.
+    """
     my_env = os.environ.copy()
 
-    # Do not reuse an expired fastlane session.
+    # Never reuse an expired session from the GitHub runner.
     my_env.pop("FASTLANE_SESSION", None)
-
     my_env["FASTLANE_USER"] = account_name
     my_env["FASTLANE_PASSWORD"] = account_pass
     my_env["FASTLANE_TEAM_ID"] = team_id
+    my_env["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
 
+    print(f"Authenticating Fastlane account: {account_name}")
     auth_pipe = subprocess.Popen(
-        # enable copy to clipboard so we're not interactively prompted
-        ["fastlane", "spaceauth", "--copy_to_clipboard", "true"],
+        ["fastlane", "spaceauth", "-u", account_name, "--copy_to_clipboard", "true"],
         stdin=PIPE,
         stdout=PIPE,
         stderr=PIPE,
@@ -317,28 +322,51 @@ def fastlane_auth(account_name: str, account_pass: str, team_id: str):
     )
 
     start_time = time.time()
-    while True:
-        if time.time() - start_time > 60:
-            raise Exception("Operation timed out")
-        else:
-            result = auth_pipe.poll()
-            if result == 0:
-                print("Logged in!")
-                break
-            elif result is not None:
-                stdout, stderr = auth_pipe.communicate()
-                result = {"error_code": result, "stdout": stdout, "stderr": stderr}
-                raise Exception(f"Error logging in: {result}")
+    two_factor_sent = False
 
+    while True:
+        result = auth_pipe.poll()
+        if result is not None:
+            stdout, stderr = auth_pipe.communicate()
+            if result == 0:
+                print("Logged in to App Store Connect successfully!")
+                return
+
+            raise Exception(
+                "Error logging in: "
+                + str(
+                    {
+                        "error_code": result,
+                        "stdout": decode_clean(stdout),
+                        "stderr": decode_clean(stderr),
+                    }
+                )
+            )
+
+        if time.time() - start_time > 180:
+            auth_pipe.kill()
+            stdout, stderr = auth_pipe.communicate()
+            raise Exception(
+                "Fastlane login timed out after 180 seconds. "
+                f"stdout={decode_clean(stdout)!r}, stderr={decode_clean(stderr)!r}"
+            )
+
+        # Poll the existing web service for a 2FA code. Send it only once.
+        if not two_factor_sent:
             account_2fa_file = Path("account_2fa.txt")
-            result = curl_with_auth(
+            result_2fa = curl_with_auth(
                 f"{secret_url}/jobs/{job_id}/2fa",
                 output=account_2fa_file,
                 check=False,
             )
-            if result.returncode == 0:
-                account_2fa = read_file(account_2fa_file)
-                auth_pipe.communicate((account_2fa + "\n").encode())
+            if result_2fa.returncode == 0 and account_2fa_file.exists():
+                account_2fa = read_file(account_2fa_file).strip()
+                if account_2fa and auth_pipe.stdin is not None:
+                    print("2FA code received; submitting it to Fastlane...")
+                    auth_pipe.stdin.write((account_2fa + "\n").encode())
+                    auth_pipe.stdin.flush()
+                    two_factor_sent = True
+
         time.sleep(1)
 
 
