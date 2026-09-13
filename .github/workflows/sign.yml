@@ -7,20 +7,19 @@ jobs:
   sign:
     runs-on: macos-latest
     timeout-minutes: 30
+
     env:
       SECRET_URL: "${{ secrets.SECRET_URL }}"
       SECRET_KEY: "${{ secrets.SECRET_KEY }}"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Cache
-        uses: actions/cache@v5
-        with:
-          path: ~/.fastlane
-          key: session-${{ github.run_id }}
-          restore-keys: |
-            session
+      - name: Clear Fastlane session
+        run: |
+          unset FASTLANE_SESSION
+          rm -f /tmp/spaceship_itc_service_key.txt
 
       - name: Sign
         run: |
