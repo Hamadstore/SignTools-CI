@@ -299,6 +299,10 @@ def clean_dev_portal_name(name: str):
 
 def fastlane_auth(account_name: str, account_pass: str, team_id: str):
     my_env = os.environ.copy()
+
+    # Do not reuse an expired fastlane session.
+    my_env.pop("FASTLANE_SESSION", None)
+
     my_env["FASTLANE_USER"] = account_name
     my_env["FASTLANE_PASSWORD"] = account_pass
     my_env["FASTLANE_TEAM_ID"] = team_id
