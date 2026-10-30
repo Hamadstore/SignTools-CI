@@ -5,7 +5,7 @@ on:
 
 jobs:
   sign:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 30
 
     env:
