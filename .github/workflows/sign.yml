@@ -5,55 +5,23 @@ on:
 
 jobs:
   sign:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 30
-
     env:
       SECRET_URL: "${{ secrets.SECRET_URL }}"
       SECRET_KEY: "${{ secrets.SECRET_KEY }}"
-      FASTLANE_SKIP_UPDATE_CHECK: "1"
-      FASTLANE_WWDR_USE_HTTP1_AND_RETRIES: "true"
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      # Temporary workaround for the September 2026 App Store Connect
-      # "Service key is empty" breakage in Fastlane Spaceship.
-      # PR #30206 contains Fastlane's upstream fix but is not yet released.
-      - name: Install Fastlane Spaceship service-key fix
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git clone --depth 1 https://github.com/fastlane/fastlane.git /tmp/fastlane
-          cd /tmp/fastlane
-          git fetch origin pull/30206/head:pr-30206
-          git checkout pr-30206
-
-          gem build fastlane.gemspec
-          sudo gem uninstall fastlane -aIx || true
-          sudo gem install ./fastlane-*.gem --no-document
-
-          fastlane --version
-
-      - name: Clear Fastlane session
-        shell: bash
-        run: |
-          unset FASTLANE_SESSION
-          rm -f /tmp/spaceship_itc_service_key.txt
-          rm -f account_2fa.txt
-
-      - name: Verify required secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${SECRET_URL}" || { echo "SECRET_URL is missing"; exit 1; }
-          test -n "${SECRET_KEY}" || { echo "SECRET_KEY is missing"; exit 1; }
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.fastlane
+          key: session-${{ github.run_id }}
+          restore-keys: |
+            session
 
       - name: Sign
-        shell: bash
         run: |
-          set -euo pipefail
-          chmod +x ./sign.py
           PYTHONUNBUFFERED=1 ./sign.py
